@@ -4,7 +4,7 @@ from config_complicated import Config
 #from config import Config
 
 
-def get_random_problems(batch_size, problem_size):
+def get_random_problems(batch_size, problem_size, time_steps=5):
     num_positions = Config.num_positions
     num_racks = Config.num_racks
     rack_group = Config.rt_groups
@@ -15,15 +15,16 @@ def get_random_problems(batch_size, problem_size):
 
     ## Generate demand
     dm_low, dm_high = Config.demand_range
-    #demand = np.random.choice(np.arange(dm_low, dm_high), (num_racks,1))
     # Generate random integers within the range [a, b]
     demand = np.random.randint(dm_low, dm_high + 1, (batch_size, num_racks))
+    rest_demand = np.random.randint(dm_low, dm_high+1, (time_steps-1, batch_size, num_racks))
+    demand_pool = np.concatenate([demand[None,:,:], rest_demand], axis=0)
 
     ## Generate action limit
     act_low, act_high = Config.action_limit_range
-    #action_limit = np.random.choice(np.arange(act_low, act_high))
     action_limit = np.random.randint(act_low, act_high+1, (batch_size, 1))
-    #action_limit = action_limit.repeat(1, num_racks)
+    rest_action_limit = np.random.randint(act_low, act_high+1, (time_steps-1, batch_size, 1))
+    action_limit_pool = np.concatenate([action_limit[None,:,:], rest_action_limit], axis=0)
     action_limit = np.tile(action_limit, (1, num_racks))
 
     rack_vals = list(range(num_racks+1))
@@ -63,7 +64,53 @@ def get_random_problems(batch_size, problem_size):
     demand = torch.tensor(demand)
     action_limit = torch.tensor(action_limit)
     problem = problem.float()
-    return problem, pos_rack_map, demand, action_limit
+    return problem, pos_rack_map, demand, action_limit, demand_pool, action_limit_pool
+
+def generate_coord(batch_size, demand):
+    num_positions = Config.num_positions
+    num_racks = Config.num_racks
+    rack_group = Config.rt_groups
+    num_group = Config.num_groups
+    resource_int = Config.resource_int
+    max_res_int = Config.max_res_int
+    shift = Config.shift
+    _, dm_high = Config.demand_range
+
+    rack_vals = list(range(num_racks+1))
+    problem = []
+    pos_rack_map = []
+    for batch_id in range(batch_size):
+        ## Position rack mapping
+        sub_pos_rack_map = np.random.choice(np.array(rack_vals),\
+                (num_positions, 1), p=np.array(Config.rack_pos_mapping_prob))
+        # Flatten the pos_rack_map to a 1D array
+        pos_rack_map_flat = sub_pos_rack_map.flatten()
+        # Initialize a dictionary to count occurrences
+        counts_dict = {}
+        # Count occurrences of each value
+        for value in pos_rack_map_flat:
+            if value==num_racks:
+                continue
+            if value in counts_dict:
+                counts_dict[value] += 1
+            else:
+                counts_dict[value] = 1
+        # Convert counts dictionary to a NumPy array
+        num_prev_pos_assigned = np.zeros((num_racks, 1), dtype=int)
+        for key, value in counts_dict.items():
+            num_prev_pos_assigned[key][0] = value
+
+        ## Encode attributes to coordinates
+        x_coord = (rack_group*shift+resource_int)/((num_group-1)*shift+max_res_int)
+        y_coord = (np.reshape(demand[batch_id], (num_racks,1))*num_positions+\
+                num_prev_pos_assigned)/((dm_high+1)*num_positions)
+        
+        sub_problem = np.hstack((x_coord, y_coord))
+        problem.append(sub_problem)
+        pos_rack_map.append(sub_pos_rack_map)
+    problem = torch.tensor(problem)
+    problem = problem.float()
+    return problem
 
 def augment_xy_data_by_8_fold(problems):
     # problems.shape: (batch, problem, 2)

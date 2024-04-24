@@ -1,4 +1,3 @@
-# rackmovement
 # Project Documentation
 
 Welcome to our project! This document provides instructions on how to run the different components of our application.

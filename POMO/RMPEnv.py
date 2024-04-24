@@ -2,8 +2,9 @@
 from dataclasses import dataclass
 import torch
 import random
+import numpy as np
 
-from RMProblemDef import get_random_problems, augment_xy_data_by_8_fold
+from RMProblemDef import get_random_problems, augment_xy_data_by_8_fold, generate_coord
 from config_complicated import Config
 #from config import Config
 
@@ -32,6 +33,8 @@ class RMPEnv:
         self.env_params = env_params
         self.problem_size = env_params['problem_size']
         self.pomo_size = env_params['pomo_size']
+        self.periods = env_params['periods']
+        # self.t = 0
 
         # Const @Load_Problem
         ####################################
@@ -42,7 +45,8 @@ class RMPEnv:
         self.problems = None
         # shape: (batch, node, node)
 
-        # The following attributes are fixed for all trajectory instances.
+        # The following attributes are fixed and static for all trajectory instances.
+        # ========================================
         self.num_positions = Config.num_positions
         self.num_rack_types = Config.num_racks
         self.num_groups = Config.num_groups
@@ -62,9 +66,11 @@ class RMPEnv:
         # shape: (scope, resource_type)
         self.level1_res_limit = torch.tensor(Config.level1_L) 
         # shape: (scope, resource_type)
+        # ========================================
 
         # Dynamic
         ####################################
+        # reset every num_rack_types running of the step function
         self.selected_count = None
         self.current_node = None
         # shape: (batch, pomo)
@@ -73,14 +79,20 @@ class RMPEnv:
 
         # RMP specific
         ####################################
+        # update every num_rack_types running of the step function
+        # Generate random demands in the reset function
         self.demand = None
         # shape: (batch, pomo)
         self.action_limit = None
         # shape: (batch, pomo)
+        # Update this attribute by self.pos_rack_map in the sub_reset function
         self.prev_pos_rack_map = None
         # shape: (batch, pomo, position)
+        # Reset this as an array with all the values equal to num_rack_types in
+        # the sub_reset function
         self.pos_rack_map = None
         # shape: (batch, pomo, position)
+        # Reset as how it was updated in the reset function
         self.scope_rack_res_array = None
         # shape: (batch, pomo, scope, resource_type)
         self.level2_scope_rack_res_array = None
@@ -91,8 +103,8 @@ class RMPEnv:
     def load_problems(self, batch_size, aug_factor=1):
         self.batch_size = batch_size
 
-        self.problems, self.prev_pos_rack_map, self.demand, self.action_limit\
-                = get_random_problems(batch_size, self.problem_size)
+        self.problems, self.prev_pos_rack_map, self.demand, self.action_limit, self.demand_pool,\
+                self.action_limit_pool = get_random_problems(batch_size, self.problem_size)
         # problems.shape: (batch, problem, 2)
         if len(self.res_limit.shape)==2:
             self.res_limit = torch.unsqueeze(self.res_limit, 0)  # Add a batch dimension
@@ -109,6 +121,16 @@ class RMPEnv:
 
         self.BATCH_IDX = torch.arange(self.batch_size)[:, None].expand(self.batch_size, self.pomo_size)
         self.POMO_IDX = torch.arange(self.pomo_size)[None, :].expand(self.batch_size, self.pomo_size)
+
+    def middle_reset(self, period):
+        # Regenerate the coordinates, demand, action_limit, and prev_pos_rack_map
+        # self.t += 1
+        self.demand, self.action_limit = np.array(self.demand_pool[period]), np.array(self.action_limit_pool[period])
+        self.prev_pos_rack_map = torch.tensor(self.pos_rack_map)
+        self.problem = generate_coord(self.batch_size, self.demand)
+        self.demand = torch.tensor(self.demand)
+        self.action_limit = torch.tensor(self.action_limit)
+        self.reset()
 
     def reset(self):
         self.selected_count = 0

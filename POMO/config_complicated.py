@@ -4,11 +4,7 @@ import random
 class Config:
     # Number of objects
     seed = 0
-    #key = random.PRNGKey(seed)
     num_positions = 1000
-
-    # For debug
-    #num_positions = 20
 
     num_racks = 10
     num_groups = 4
@@ -27,8 +23,6 @@ class Config:
     level13_map = [n//10 for n in range(num_scopes)]
     level23_map = onp.array(level23_map)
     level13_map = onp.array(level13_map)
-    #level23_map += onp.ones(num_scopes).astype(int)*num_scopes
-    #level13_map += onp.ones(num_scopes).astype(int)*(num_scopes+num_level2_scopes)
     ## TODO-The following causes bugs. It should be solved soon.
     rack_pos_mapping_prob = [0.2/num_racks]*(num_racks+1)
     rack_pos_mapping_prob[-1] = 0.8 
@@ -38,8 +32,6 @@ class Config:
     # Position
     scopes = [n//10 for n in range(num_positions)]
     scopes = onp.array(scopes)
-    #scopes = onp.random.choice(num_scopes, (num_positions,1), p=scope_weights)
-    #scopes = onp.array(scopes)
     # Resource table
     resource_table = []
     resource_int = []
@@ -59,8 +51,6 @@ class Config:
     # Demand and action limit range
     demand_range = [4, 8]
 
-    # For debug
-    #demand_range = [1, 2]
     action_limit_range = [80*num_racks,100*num_racks]
     # Dataframe column names
     position_cols = ['pos_id', 'status', 'scope']
@@ -72,7 +62,6 @@ class Config:
     level2_L = onp.array(level2_L)
     level1_L = [[300 for _ in range(10)] for _ in range(len(scope_weights))]
     level1_L = onp.array(level1_L)
-    #spread_metrics = [({0,1}, {0, 2, 4, 6, 8}, 3), ({2,3,4}, {1, 3, 5, 7, 9}, 2)]
     spread_metrics = [(set(range(100)), set(range(4)), i) for i in range(len(resource_weights))]
 
     scope_rack_res_array = onp.zeros((num_scopes, len(resource_weights))) 

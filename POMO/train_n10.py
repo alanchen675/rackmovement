@@ -3,7 +3,7 @@
 
 DEBUG_MODE = False
 USE_CUDA = not DEBUG_MODE
-CUDA_DEVICE_NUM = 3
+CUDA_DEVICE_NUM = 0
 
 
 ##########################################################################################
@@ -33,6 +33,7 @@ env_params = {
     'problem_size': 10,
     'pomo_size': 10,
     'num_positions': 1000,
+    'periods': 5,
 }
 
 model_params = {

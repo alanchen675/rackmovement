@@ -152,6 +152,14 @@ class RMPTrainer:
         return score_AM.avg, loss_AM.avg
 
     def _train_one_batch(self, batch_size):
+        ## TODO-Revise this to online version
+        # Method: run the step function for num_rack_types*num_large_steps
+        # For every num_rack_types running of step functions, update the 
+        # environment.
+        ## TODO-Specify what to update for every num_rack_types running of the step function
+        ## TODO-Create the critic network for predicting the long term reward
+        # Collect the reward for every num_rack_types running of the step function 
+        # and use the rewards to train the critic network
 
         # Prep
         ###############################################
@@ -161,30 +169,48 @@ class RMPTrainer:
         self.model.pre_forward(reset_state)
 
         prob_list = torch.zeros(size=(batch_size, self.env.pomo_size, 0))
-        # shape: (batch, pomo, 0~problem)
+        # shape: (batch, pomo, 0~problem*self.env.periods)
+        reward_list = torch.zeros(size=(batch_size, self.env.pomo_size, 0))
+        # shape: (batch, pomo, 0~self.env.periods)
 
         # POMO Rollout
         ###############################################
         state, reward, done = self.env.pre_step()
-        while not done:
-            selected, prob = self.model(state)
-            # shape: (batch, pomo)
-            state, reward, done = self.env.step(selected)
-            prob_list = torch.cat((prob_list, prob[:, :, None]), dim=2)
-
+        for period in range(1,self.env.periods+1):
+            while not done:
+                selected, prob = self.model(state)
+                # shape: (batch, pomo)
+                state, reward, done = self.env.step(selected)
+                prob_list = torch.cat((prob_list, prob[:, :, None]), dim=2)
+            ## TODO-while done, call the self.env.middle_reset()
+            reward_list = torch.cat((reward_list, reward[:, :, None]), dim=2)
+            if period < self.env.periods:
+                self.env.middle_reset(period)
         # Loss
         ###############################################
+        ##  TODO-For online implementation, the advantage should be updated:
+        #   A. the reward here should be replaced by the long-term rewards
+        #   B. the baseline reward should be replaced by:
+        #       (1) long term reward estimate of the critic network
+        #       (2) Average of the long-term rewards
+        ##  TODO-Check if the logprob has to be revised
+        reward = self.gen_long_term_rew(batch_size, reward_list)
+        # shape: (batch, pomo, periods)
+        
         advantage = reward - reward.float().mean(dim=1, keepdims=True)
-        # shape: (batch, pomo)
-        log_prob = prob_list.log().sum(dim=2)
-        # size = (batch, pomo)
-        loss = -advantage * log_prob  # Minus Sign: To Increase REWARD
+        # shape: (batch, pomo, periods)
+        # log_prob = prob_list.log().sum(dim=2)
+        log_prob = self.reshape_and_sum(prob_list.log(), self.env.problem_size)
+        # size = (batch, pomo, periods)
+        loss = -(advantage * log_prob)  # Minus Sign: To Increase REWARD
+        # size = (batch, pomo, periods)
+        loss = loss.sum(dim=2)
         # shape: (batch, pomo)
         loss_mean = loss.mean()
 
         # Score
         ###############################################
-        max_pomo_reward, _ = reward.max(dim=1)  # get best results from pomo
+        max_pomo_reward, _ = reward[:,:,0].max(dim=1)  # get best results from pomo
         score_mean = -max_pomo_reward.float().mean()  # negative sign to make positive value
 
         # Step & Return
@@ -193,3 +219,28 @@ class RMPTrainer:
         loss_mean.backward()
         self.optimizer.step()
         return score_mean.item(), loss_mean.item()
+    
+    def gen_long_term_rew(self, batch_size, rewards, gamma=0.99):
+        discounted_rewards = torch.zeros_like(rewards)
+    
+        # Iterate over each agent/environment in the tensor
+        for a in range(batch_size):
+            for b in range(self.env.pomo_size):
+                R = 0
+                for t in reversed(range(self.env.periods)):
+                    R = rewards[a, b, t] + gamma * R
+                    discounted_rewards[a, b, t] = R
+        
+        return discounted_rewards
+
+    def reshape_and_sum(self, S, D):
+        # Get the shape of the input tensor
+        A, B, CD = S.shape
+        
+        # Reshape S to split the last dimension into D chunks
+        S_reshaped = S.view(A, B, -1, D)
+        
+        # Sum along the last dimension of the reshaped tensor
+        T = S_reshaped.sum(dim=-1)
+        
+        return T
