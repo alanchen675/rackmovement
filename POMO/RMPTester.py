@@ -4,13 +4,14 @@ import torch
 import os
 from logging import getLogger
 
-from TSPEnv import TSPEnv as Env
-from TSPModel import TSPModel as Model
+from RMPEnv import RMPEnv as Env
+from RMPModel import RMPModel as Model
+from mip_solvers import SubSolver as MIPSolver
 
 from utils.utils import *
 
 
-class TSPTester:
+class RMPTester:
     def __init__(self,
                  env_params,
                  model_params,
@@ -86,14 +87,18 @@ class TSPTester:
                 self.logger.info(" NO-AUG SCORE: {:.4f} ".format(score_AM.avg))
                 self.logger.info(" AUGMENTATION SCORE: {:.4f} ".format(aug_score_AM.avg))
 
-    def _test_one_batch(self, batch_size):
-
-        # Augmentation
-        ###############################################
+    def get_aug_factor(self):
         if self.tester_params['augmentation_enable']:
             aug_factor = self.tester_params['aug_factor']
         else:
             aug_factor = 1
+        return aug_factor
+
+    def _test_one_batch(self, batch_size):
+
+        # Augmentation
+        ###############################################
+        aug_factor = self.get_aug_factor()
 
         # Ready
         ###############################################
@@ -105,14 +110,56 @@ class TSPTester:
 
         # POMO Rollout
         ###############################################
+        reward_list = torch.zeros(size=(batch_size, self.env.pomo_size, 0))
+        # shape: (batch, pomo, 0~self.env.periods)
         state, reward, done = self.env.pre_step()
-        while not done:
-            selected, _ = self.model(state)
-            # shape: (batch, pomo)
-            state, reward, done = self.env.step(selected)
+        for period in range(1,self.env.periods+1):
+            while not done:
+                selected, _ = self.model(state)
+                # shape: (batch, pomo)
+                state, reward, done = self.env.step(selected)
+            ## TODO-while done, call the self.env.middle_reset()
+            reward_list = torch.cat((reward_list, reward[:, :, None]), dim=2)
+            if period < self.env.periods:
+                self.env.middle_reset(period)
 
+        return self.get_scores(batch_size, aug_factor, reward_list)
+
+    def _test_one_batch_mip(self, batch_size):
+        # Augmentation
+        ###############################################
+        aug_factor = self.get_aug_factor()
+
+        # Ready
+        ###############################################
+        with torch.no_grad():
+            self.env.load_problems(batch_size, aug_factor)
+            reset_state, _, _ = self.env.reset()
+
+        # Initialize MIP solver
+        ###############################################
+        mip_solver = MIPSolver()
+
+        # POMO Rollout
+        ###############################################
+        reward_list = torch.zeros(size=(batch_size, 0))
+        # shape: (batch, 0~self.env.periods)
+        state, reward, done = self.env.pre_step()
+        for period in range(1,self.env.periods+1):
+            # TODO - Get the MIP actions
+            # TODO - Update self.env
+            reward_list = torch.cat((reward_list, reward[:, :, None]), dim=2)
+            if period < self.env.periods:
+                self.env.middle_reset(period)
+                
+        return self.get_scores(batch_size, aug_factor, reward_list)
+
+    def get_scores(self, batch_size, aug_factor, reward_list)
         # Return
         ###############################################
+        reward = self.gen_long_term_rew(batch_size, reward_list)
+        # shape: (batch, pomo, periods)
+
         aug_reward = reward.reshape(aug_factor, batch_size, self.env.pomo_size)
         # shape: (augmentation, batch, pomo)
 
@@ -125,3 +172,16 @@ class TSPTester:
         aug_score = -max_aug_pomo_reward.float().mean()  # negative sign to make positive value
 
         return no_aug_score.item(), aug_score.item()
+
+    def gen_long_term_rew(self, batch_size, rewards, gamma=0.99):
+        discounted_rewards = torch.zeros_like(rewards)
+    
+        # Iterate over each agent/environment in the tensor
+        for a in range(batch_size):
+            for b in range(self.env.pomo_size):
+                R = 0
+                for t in reversed(range(self.env.periods)):
+                    R = rewards[a, b, t] + gamma * R
+                    discounted_rewards[a, b, t] = R
+        
+        return discounted_rewards

@@ -37,7 +37,7 @@ import matplotlib.pyplot as plt
 import json
 import shutil
 
-process_start_time = datetime.now(pytz.timezone("Asia/Seoul"))
+process_start_time = datetime.now(pytz.timezone('US/Eastern'))
 result_folder = './result/' + process_start_time.strftime("%Y%m%d_%H%M%S") + '{desc}'
 
 

@@ -4,34 +4,51 @@ import random
 class Config:
     # Number of objects
     seed = 0
-    num_positions = 1000
+    num_positions = 9000
 
     num_racks = 10
     num_groups = 4
-    num_scopes = 100 
+    num_scopes = 600 
+    # num_scopes = 100 
     # Random generation weight
     scope_weights = [0.01]*num_scopes
     rack_group_weights = [0.25]*num_groups
-    num_positions_in_level3_scope = 10 
+    
+    ## Postitions and scopes
+    num_positions_in_level3_scope = int(num_positions//num_scopes)
+    # For 1000 positions setting
     num_level3_in_level2 = 5
     num_level2_in_levle1 = 2
-    num_level2_scopes = 20
-    num_level1_scopes = 10
+    # For 9000 positions setting
+    # num_level3_in_level2 = 20
+    # num_level2_in_levle1 = 2
+    # For 1000 positions setting
+    # num_level2_scopes = 20
+    # num_level1_scopes = 10
+    # For 9000 positions setting
+    num_level2_scopes = 30
+    num_level1_scopes = 15
     level2_scope = [i for i in range(num_scopes, num_scopes+num_level2_scopes)]
     level1_scope = [i for i in range(num_scopes+num_level2_scopes, num_scopes+num_level2_scopes+num_level1_scopes)]
-    level23_map = [n//5 for n in range(num_scopes)]
-    level13_map = [n//10 for n in range(num_scopes)]
+    # For 9000 positions setting
+    level23_map = [n//20 for n in range(num_scopes)]
+    level13_map = [n//40 for n in range(num_scopes)]
+    # For 1000 positions setting
+    # level23_map = [n//5 for n in range(num_scopes)]
+    # level13_map = [n//10 for n in range(num_scopes)]
     level23_map = onp.array(level23_map)
     level13_map = onp.array(level13_map)
+    # Position
+    scopes = [n//10 for n in range(num_positions)]
+    scopes = onp.array(scopes)
+
+    ## Rack types
     ## TODO-The following causes bugs. It should be solved soon.
     rack_pos_mapping_prob = [0.2/num_racks]*(num_racks+1)
     rack_pos_mapping_prob[-1] = 0.8 
     resource_weights = [1, 0.5, 0.25, 0.5, 0.75, 0.25, 0.25, 0.25, 0.75, 0.5]
     # Rack
     rt_groups = onp.random.choice(num_groups, (num_racks,1), p=rack_group_weights)
-    # Position
-    scopes = [n//10 for n in range(num_positions)]
-    scopes = onp.array(scopes)
     # Resource table
     resource_table = []
     resource_int = []

@@ -59,8 +59,14 @@ def get_random_problems(batch_size, problem_size, time_steps=5):
         sub_problem = np.hstack((x_coord, y_coord))
         problem.append(sub_problem)
         pos_rack_map.append(sub_pos_rack_map)
-    problem = torch.tensor(problem)
-    pos_rack_map = torch.tensor(pos_rack_map)
+    problem = np.array(problem)
+    problem = torch.from_numpy(problem).to('cuda')
+
+    pos_rack_map = np.array(pos_rack_map)
+    pos_rack_map = torch.from_numpy(pos_rack_map).to('cuda')
+
+    # problem = torch.tensor(problem)
+    # pos_rack_map = torch.tensor(pos_rack_map)
     demand = torch.tensor(demand)
     action_limit = torch.tensor(action_limit)
     problem = problem.float()
@@ -108,7 +114,14 @@ def generate_coord(batch_size, demand):
         sub_problem = np.hstack((x_coord, y_coord))
         problem.append(sub_problem)
         pos_rack_map.append(sub_pos_rack_map)
-    problem = torch.tensor(problem)
+    problem = np.array(problem)
+    problem = torch.from_numpy(problem).to('cuda')
+    # problem = torch.tensor(problem)
+
+    pos_rack_map = np.array(pos_rack_map)
+    pos_rack_map = torch.from_numpy(pos_rack_map).to('cuda')
+
+
     problem = problem.float()
     return problem
 

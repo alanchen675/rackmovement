@@ -1,13 +1,79 @@
 import pandas as pd
 import numpy as np
 from config_complicated import Config
-#from config import Config
 from mip import Model, xsum, minimize, BINARY, INTEGER, OptimizationStatus
 
 class SubSolver:
     def __init__(self, args):
         for k, v in args.items():
             setattr(self, k, v)
+
+    def _solve_whole(self, prev_pos_rack_map, demand, action_limit):
+        """
+        Serve as the interface to call the solve_whole()
+        Convert the input to be dataframes and pack the output into desired format.
+        Input: state variable from the RMPEnv class
+        self.demand = None
+        # shape: (batch, pomo)
+        self.action_limit = None
+        # shape: (batch, pomo)
+        self.prev_pos_rack_map = None
+        # shape: (batch, pomo, position)
+        """ 
+        # Assuming prev_pos_rack_map, demand, and action_limit are PyTorch tensors
+        # Select the first index from the b dimension
+        prev_pos_rack_map = prev_pos_rack_map[:, 0, :]  # Shape will now be (num_batches, num_positions)
+        demand = demand[:, 0]                          # Shape will now be (num_batches,)
+        action_limit = action_limit[:, 0]              # Shape will now be (num_batches,)
+
+        # Convert PyTorch tensors to numpy arrays
+        prev_pos_rack_map_np = prev_pos_rack_map.numpy()
+        demand_np = demand.numpy()
+        action_limit_np = action_limit.numpy()
+
+        # Create the rack_df dataframe
+        rt_ids = range(Config.num_rack_types)
+        rack_df = pd.DataFrame({
+            Config.rack_type_cols[0]: rt_ids,  # First column
+            Config.rack_type_cols[1]: rt_ids,  # Second column
+            **{col: Config.resource_table[i] for i, col in enumerate(Config.rack_type_cols[2:])}
+        })
+
+        action_arr = []
+        reward_arr = []
+        # Iterate over each batch
+        for batch in range(prev_pos_rack_map.shape[0]):
+            # Create position_df for each batch
+            position_df = pd.DataFrame({
+                'pos_id': range(Config.num_positions),
+                'status': prev_pos_rack_map[batch],
+                'scope': Config.scopes
+            })
+            # Call self.step_whole with the appropriate parameters
+            self.step_whole(rack_df, position_df, demand[batch], action_limit[batch])
+            status, reward, pos_rack_map, movement = self.solve_whole(rack_df, position_df,\
+                demand[i,0].numpy(), action_limit[i,0].numpy(), Config.L)
+            action_arr.append(self.convert_to_list(pos_rack_map))
+            reward_arr.append(reward)
+
+        action_arr = np.array(action_arr)
+        reward_arr = np.array(reward_arr)
+        return action_arr
+
+    def convert_to_list(self, action):
+        """
+        Convert the action which is a dictionary to a list
+        ans = {r:{p:-1 for p in pos_indices} for r in rack_indices}
+        """
+        num_rack_types = len(action)
+        num_positions = len(action[0])
+        pos_rack_map = np.one(num_positions)*num_rack_types
+        for rack_type, position_list in action.items():
+            for position, rt_ind in enumerate(position_list):
+                if rt_ind==-1:
+                    continue
+                pos_rack_map[position] = rack_type
+        return pos_rack_map
 
     def solve_whole(self, rack_df, position_df, demand, action_limit, L):
         scope_positions_dict = position_df.groupby('scope')['pos_id'].agg(list).to_dict()
