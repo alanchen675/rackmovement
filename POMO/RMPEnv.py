@@ -29,6 +29,8 @@ class Step_State:
 
 class RMPEnv:
     def __init__(self, **env_params):
+        # Use fork to start the process
+        mp.set_start_method('fork')
 
         # Const @INIT
         ####################################
@@ -101,7 +103,7 @@ class RMPEnv:
         # shape: (batch, pomo, scope, resource_type)
         self.level1_scope_rack_res_array = None
         # shape: (batch, pomo, scope, resource_type)
-        
+
     def load_problems(self, batch_size, aug_factor=1):
         self.batch_size = batch_size
 
@@ -137,16 +139,21 @@ class RMPEnv:
     def middle_reset(self, period):
         # Regenerate the coordinates, demand, action_limit, and prev_pos_rack_map
         # self.t += 1
-        print(f'Shape of old action_limit is {self.action_limit.shape}')
         self.demand, self.action_limit = np.array(self.demand_pool[period]), np.array(self.action_limit_pool[period])
-        print(f'Shape of new action_limit is {self.action_limit.shape}')
-        self.prev_pos_rack_map = torch.tensor(self.pos_rack_map)
+        print(f'[middle_rest][after from pool]Shape of new action_limit is {self.action_limit.shape}')
+
+        # For multiprocessing, need to check the scope resource arrays
+        # self.prev_pos_rack_map = torch.tensor(self.pos_rack_map)
+        self.prev_pos_rack_map = self.pos_rack_map.clone().detach()  # This tensor is not shared
+
         self.problem = generate_coord(self.batch_size, self.demand)
         self.demand = torch.tensor(self.demand)
         self.action_limit = torch.tensor(self.action_limit)
+        print(f'[middle_rest][before reset]Shape of new action_limit is {self.action_limit.shape}')
         self.reset()
 
     def reset(self):
+        print(f'[rest][first line]Shape of new action_limit is {self.action_limit.shape}')
         self.selected_count = 0
         self.current_node = None
         # shape: (batch, pomo)
@@ -163,6 +170,7 @@ class RMPEnv:
         # shape: (batch, pomo, position)
         self.pos_rack_map = self.num_rack_types*torch.ones((self.batch_size, self.pomo_size, self.num_positions))
         self.pos_rack_map = self.pos_rack_map.long()
+        
         # shape: (batch, pomo, position)
         self.scope_rack_res_array = torch.zeros((self.batch_size,\
                 self.pomo_size, self.num_scopes, self.num_resource_types))
@@ -174,22 +182,16 @@ class RMPEnv:
                 self.pomo_size, self.num_level1_scopes, self.num_resource_types))
         # shape: (batch, pomo, scope, resource_type)
 
+        # For multiprocessing
+        self.pos_rack_map.share_memory_()
+        self.scope_rack_res_array.share_memory_()
+        self.level2_scope_rack_res_array.share_memory_()
+        self.level1_scope_rack_res_array.share_memory_()
+
         reward = None
         done = False
+        print(f'[rest][last line]Shape of new action_limit is {self.action_limit.shape}')
         return Reset_State(self.problems), reward, done
-
-    def _init_prev_pos_rack_map(self):
-        total_elements = self.batch_size * self.pomo_size * self.num_positions
-        # Determine the number of elements to set to -1 and to sample from 0 to 4
-        num_minus_one = int(0.8 * total_elements)
-        num_sampled = total_elements - num_minus_one
-        # Generate a Python list with -1 and sampled values from 0 to 4
-        values = [-1] * num_minus_one + random.choices(range(self.num_rack_types), k=num_sampled)
-        # Shuffle the list to ensure randomness
-        random.shuffle(values)
-        # Convert the list to a PyTorch tensor
-        init_pos_rack_map = torch.tensor(values).reshape(self.batch_size, self.pomo_size, self.num_positions)
-        return init_pos_rack_map.int()
 
     def pre_step(self):
         reward = None
@@ -198,7 +200,7 @@ class RMPEnv:
 
     def step(self, selected):
         # selected.shape: (batch, pomo)
-
+        print(f'[step][first line]Shape of new action_limit is {self.action_limit.shape}')
         self.selected_count += 1
         self.current_node = selected
         # shape: (batch, pomo)
@@ -214,16 +216,19 @@ class RMPEnv:
 
         ## Decide whether parallelization is needed.
         # self.eq_heuristics_parallel(selected)
+        print(f'[step][before heuristic]Shape of new action_limit is {self.action_limit.shape}')
         self.eq_heuristics(selected)
-
+        print(f'[step][after heuristic]Shape of new action_limit is {self.action_limit.shape}')
         # returning values
         done = (self.selected_count == self.problem_size)
         if done:
+        #if self.selected_count == self.problem_size:
             reward = -self.get_reward()  # note the minus sign!
         else:
             reward = None
 
         return self.step_state, reward, done
+        #return self.step_state, reward, True 
 
     def get_reward(self):
         # Move the second dimension to the third dimension
@@ -234,6 +239,7 @@ class RMPEnv:
         mask = mask.float()
         reward = torch.sum(mask, dim=2)
         reward += torch.sum(self.action_limit<0)*100
+        # Assume that the shared tensors can still be used to calculate reward
         max_res_per_scope = torch.max(self.scope_rack_res_array, dim=2)[0]
         reward += torch.sum(max_res_per_scope, dim=2)
         max_res_per_level2_scope = torch.max(self.level2_scope_rack_res_array, dim=2)[0]
@@ -270,23 +276,16 @@ class RMPEnv:
         remaining_demand = demand_selected.squeeze(-1)-torch.sum(num_pos, dim=2, keepdim=False)
         # shape: (batch, pomo)
 
-        mp.set_start_method('spawn')
-        # pool_size = mp.cpu_count()  # Number of CPUs
-        # with mp.Pool(pool_size) as pool:
-        #     for i in range(num_pos.shape[0]):
-        #         tasks = [(i, j, remaining_demand[i,j], num_pos[i,j], action[i,j]\
-        #             ) for j in range(num_pos.shape[1])]
-        #         pool.map(self._heuristics_parallel, tasks)
-
         processes = []
         for i in range(num_pos.shape[0]):
             for j in range(num_pos.shape[1]):
                 p = mp.Process(target=self._heuristics_parallel, args=(i,j,remaining_demand[i,j],\
-                    num_pos[i,j],action[i,j],pos_rack_map,action_limit,scope_rack_res_array,\
-                    level1_scope_rack_res_array, level2_scope_rack_res_array))
+                    num_pos[i,j],action[i,j]))
                 p.start()
                 processes.append(p)
 
+        for p in processes:
+            p.join()
     
     def _heuristics_parallel(self, batch_id, pomo_id, remaining_demand, num_pos, action):
         """
@@ -352,8 +351,6 @@ class RMPEnv:
             self.level2_scope_rack_res_array[batch_id, pomo_id, level2_scope] += resource_usage
             self.level1_scope_rack_res_array[batch_id, pomo_id, level1_scope] += resource_usage
 
-
-
     def eq_heuristics(self, action):
         """
         A heuristic approach that evenly allocates rack types to the positions
@@ -368,6 +365,7 @@ class RMPEnv:
             scope_rack_res_array: the remaining allowed amount of resource for a scope and a rack group
 
         """
+        print(f'[heuristic][first line]Shape of new action_limit is {self.action_limit.shape}')
         diff = self.res_limit-self.scope_rack_res_array
         weight, _ = torch.min(diff, dim=-1)
         sum_weight = torch.sum(weight, dim=-1, keepdim=True)
@@ -379,6 +377,7 @@ class RMPEnv:
         num_pos = weight*demand_selected
         num_pos = torch.ceil(num_pos-1e-6) 
         remaining_demand = demand_selected.squeeze(-1)-torch.sum(num_pos, dim=2, keepdim=False)
+        print(f'[heuristic][before for loop]Shape of new action_limit is {self.action_limit.shape}')
 
         for batch_id in range(num_pos.shape[0]):
             for pomo_id in range(num_pos.shape[1]):

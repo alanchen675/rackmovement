@@ -185,7 +185,9 @@ class RMPTrainer:
             ## TODO-while done, call the self.env.middle_reset()
             reward_list = torch.cat((reward_list, reward[:, :, None]), dim=2)
             if period < self.env.periods:
+                # The rack movement process is not done
                 self.env.middle_reset(period)
+                done = False 
         # Loss
         ###############################################
         ##  TODO-For online implementation, the advantage should be updated:
