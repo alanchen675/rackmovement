@@ -44,10 +44,11 @@ class RMPTester:
         self.model = Model(**self.model_params)
 
         # Restore
-        model_load = tester_params['model_load']
-        checkpoint_fullname = '{path}/checkpoint-{epoch}.pt'.format(**model_load)
-        checkpoint = torch.load(checkpoint_fullname, map_location=device)
-        self.model.load_state_dict(checkpoint['model_state_dict'])
+        if self.tester_params['algorithm']=='pomo':
+            model_load = tester_params['model_load']
+            checkpoint_fullname = '{path}/checkpoint-{epoch}.pt'.format(**model_load)
+            checkpoint = torch.load(checkpoint_fullname, map_location=device)
+            self.model.load_state_dict(checkpoint['model_state_dict'])
 
         # utility
         self.time_estimator = TimeEstimator()
@@ -66,7 +67,10 @@ class RMPTester:
             remaining = test_num_episode - episode
             batch_size = min(self.tester_params['test_batch_size'], remaining)
 
-            score, aug_score = self._test_one_batch(batch_size)
+            if self.tester_params['algorithm']=='pomo':
+                score, aug_score = self._test_one_batch(batch_size)
+            elif self.tester_params['algorithm']=='comp_heuristic':
+                score, aug_score = self._test_one_batch_comp_heuristic(batch_size)
 
             score_AM.update(score, batch_size)
             aug_score_AM.update(aug_score, batch_size)
@@ -125,6 +129,35 @@ class RMPTester:
 
         return self.get_scores(batch_size, aug_factor, reward_list)
 
+    def _test_one_batch_comp_heuristic(self, batch_size):
+        # Augmentation
+        ###############################################
+        aug_factor = self.get_aug_factor()
+
+        # Ready
+        ###############################################
+        with torch.no_grad():
+            self.env.load_problems(batch_size, aug_factor)
+            reset_state, _, _ = self.env.reset()
+        # POMO Rollout
+        ###############################################
+        reward_list = torch.zeros(size=(batch_size, self.env.pomo_size, 0))
+        # shape: (batch, pomo, 0~self.env.periods)
+        state, reward, done = self.env.pre_step()
+        for period in range(1,self.env.periods+1):
+            action = 0
+            while not done:
+                selected = action*torch.ones(batch_size, self.env.pomo_size, dtype=torch.int64)
+                # shape: (batch, pomo)
+                state, reward, done = self.env.step(selected)
+                action += 1
+            ## TODO-while done, call the self.env.middle_reset()
+            reward_list = torch.cat((reward_list, reward[:, :, None]), dim=2)
+            if period < self.env.periods:
+                self.env.middle_reset(period)
+
+        return self.get_scores(batch_size, aug_factor, reward_list)
+
     def _test_one_batch_mip(self, batch_size):
         # Augmentation
         ###############################################
@@ -151,10 +184,10 @@ class RMPTester:
             reward_list = torch.cat((reward_list, reward[:, :, None]), dim=2)
             if period < self.env.periods:
                 self.env.middle_reset(period)
-                
+
         return self.get_scores(batch_size, aug_factor, reward_list)
 
-    def get_scores(self, batch_size, aug_factor, reward_list)
+    def get_scores(self, batch_size, aug_factor, reward_list):
         # Return
         ###############################################
         reward = self.gen_long_term_rew(batch_size, reward_list)

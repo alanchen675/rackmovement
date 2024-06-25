@@ -34,7 +34,7 @@ env_params = {
     'problem_size': 10,
     'pomo_size': 10,
     'num_positions': 1000,
-    'periods': 5,
+    'periods': 1,
 }
 
 model_params = {
@@ -103,6 +103,8 @@ def main():
     create_logger(**logger_params)
     _print_config()
     print(f'Number of CPUs: {multiprocessing.cpu_count()}')
+    num_cpus = int(os.getenv('SLURM_CPUS_PER_TASK', 1))
+    print(f"Using {num_cpus} CPUs as allocated by SLURM.")
 
     trainer = Trainer(env_params=env_params,
                       model_params=model_params,

@@ -130,7 +130,8 @@ class RMPTrainer:
             remaining = train_num_episode - episode
             batch_size = min(self.trainer_params['train_batch_size'], remaining)
 
-            avg_score, avg_loss = self._train_one_batch(batch_size)
+            # avg_score, avg_loss = self._train_one_batch(batch_size)
+            avg_score, avg_loss = self._train_one_batch_offline(batch_size)
             score_AM.update(avg_score, batch_size)
             loss_AM.update(avg_loss, batch_size)
 
@@ -177,6 +178,8 @@ class RMPTrainer:
         ###############################################
         state, reward, done = self.env.pre_step()
         for period in range(1,self.env.periods+1):
+            self.logger.info(f'POMO Rollout for period {period}')
+            #self.logger.info(f'POMO pre_step state is {state}')
             while not done:
                 selected, prob = self.model(state)
                 # shape: (batch, pomo)
@@ -184,9 +187,12 @@ class RMPTrainer:
                 prob_list = torch.cat((prob_list, prob[:, :, None]), dim=2)
             ## TODO-while done, call the self.env.middle_reset()
             reward_list = torch.cat((reward_list, reward[:, :, None]), dim=2)
+            #self.logger.info(f'POMO state after one period finishes is {state}')
             if period < self.env.periods:
                 # The rack movement process is not done
                 self.env.middle_reset(period)
+                self.model.pre_forward(reset_state)
+                state, reward, done = self.env.pre_step()
                 done = False 
         # Loss
         ###############################################
@@ -246,3 +252,45 @@ class RMPTrainer:
         T = S_reshaped.sum(dim=-1)
         
         return T
+
+    def _train_one_batch_offline(self, batch_size):
+        # Prep
+        ###############################################
+        self.model.train()
+        self.env.load_problems(batch_size)
+        reset_state, _, _ = self.env.reset()
+        self.model.pre_forward(reset_state)
+
+        prob_list = torch.zeros(size=(batch_size, self.env.pomo_size, 0))
+        # shape: (batch, pomo, 0~problem*self.env.periods)
+
+        # POMO Rollout
+        ###############################################
+        state, reward, done = self.env.pre_step()
+        while not done:
+            selected, prob = self.model(state)
+            # shape: (batch, pomo)
+            state, reward, done = self.env.step(selected)
+            prob_list = torch.cat((prob_list, prob[:, :, None]), dim=2)
+
+        # Loss
+        ###############################################
+        advantage = reward - reward.float().mean(dim=1, keepdims=True)
+        # shape: (batch, pomo)
+        log_prob = prob_list.log().sum(dim=2)
+        # size = (batch, pomo)
+        loss = -(advantage * log_prob)  # Minus Sign: To Increase REWARD
+        # size = (batch, pomo)
+        loss_mean = loss.mean()
+
+        # Score
+        ###############################################
+        max_pomo_reward, _ = reward.max(dim=1)  # get best results from pomo
+        score_mean = -max_pomo_reward.float().mean()  # negative sign to make positive value
+
+        # Step & Return
+        ###############################################
+        self.model.zero_grad()
+        loss_mean.backward()
+        self.optimizer.step()
+        return score_mean.item(), loss_mean.item()

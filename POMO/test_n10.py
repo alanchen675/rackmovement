@@ -32,6 +32,7 @@ from RMPTester import RMPTester as Tester
 env_params = {
     'problem_size': 10,
     'pomo_size': 10,
+    'periods': 1,
 }
 
 model_params = {
@@ -46,14 +47,15 @@ model_params = {
 }
 
 tester_params = {
+    'algorithm': 'comp_heuristic',
     'use_cuda': USE_CUDA,
     'cuda_device_num': CUDA_DEVICE_NUM,
     'model_load': {
         'path': './result/saved_tsp20_model',  # directory path of pre-trained model and log files saved.
         'epoch': 510,  # epoch version of pre-trained model to laod.
     },
-    'test_episodes': 100*1000,
-    'test_batch_size': 10000,
+    'test_episodes': 80,
+    'test_batch_size': 8,
     'augmentation_enable': False,
     'aug_factor': 8,
     'aug_batch_size': 1000,

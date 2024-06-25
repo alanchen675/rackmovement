@@ -8,12 +8,12 @@ class Config:
 
     num_racks = 10
     num_groups = 4
-    num_scopes = 600 
+    num_scopes = 600
     # num_scopes = 100 
     # Random generation weight
     scope_weights = [0.01]*num_scopes
     rack_group_weights = [0.25]*num_groups
-    
+
     ## Postitions and scopes
     num_positions_in_level3_scope = int(num_positions//num_scopes)
     # For 1000 positions setting
@@ -45,7 +45,7 @@ class Config:
     ## Rack types
     ## TODO-The following causes bugs. It should be solved soon.
     rack_pos_mapping_prob = [0.2/num_racks]*(num_racks+1)
-    rack_pos_mapping_prob[-1] = 0.8 
+    rack_pos_mapping_prob[-1] = 0.8
     resource_weights = [1, 0.5, 0.25, 0.5, 0.75, 0.25, 0.25, 0.25, 0.75, 0.5]
     # Rack
     rt_groups = onp.random.choice(num_groups, (num_racks,1), p=rack_group_weights)

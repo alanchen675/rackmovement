@@ -19,11 +19,14 @@ class SubSolver:
         # shape: (batch, pomo)
         self.prev_pos_rack_map = None
         # shape: (batch, pomo, position)
-        """ 
+        """
         # Assuming prev_pos_rack_map, demand, and action_limit are PyTorch tensors
         # Select the first index from the b dimension
         prev_pos_rack_map = prev_pos_rack_map[:, 0, :]  # Shape will now be (num_batches, num_positions)
+        # Bug, shape of demand is (batch_size, rack_types=pomo_size) represents the demand for each rack type
         demand = demand[:, 0]                          # Shape will now be (num_batches,)
+        # shape of action limit is (batch_size, pomo_size), this is used to record results for different selection of first node
+        # So, in MIP we can just take the first along the second dimension as MIP does not do sequential decision making
         action_limit = action_limit[:, 0]              # Shape will now be (num_batches,)
 
         # Convert PyTorch tensors to numpy arrays

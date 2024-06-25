@@ -110,7 +110,6 @@ def generate_coord(batch_size, demand):
         x_coord = (rack_group*shift+resource_int)/((num_group-1)*shift+max_res_int)
         y_coord = (np.reshape(demand[batch_id], (num_racks,1))*num_positions+\
                 num_prev_pos_assigned)/((dm_high+1)*num_positions)
-        
         sub_problem = np.hstack((x_coord, y_coord))
         problem.append(sub_problem)
         pos_rack_map.append(sub_pos_rack_map)
