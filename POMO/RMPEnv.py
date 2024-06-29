@@ -333,12 +333,12 @@ class RMPEnv:
         # Computing the terms with softplus and sum reductions
         SXRmin = torch.minimum(torch.zeros_like(self.res_limit, device='cuda'), self.res_limit - SXR)
         #self.logger.info(f'The shape of tensor after min is {SXRmin.shape}')
-        first_term = -F.softplus(SXRmin, beta=1).sum(dim=(2, 3))
-        third_term = -F.softplus(torch.minimum(torch.zeros_like(self.level2_res_limit, device='cuda'), self.level2_res_limit.unsqueeze(0).unsqueeze(0) - S2XR), beta=1).sum(dim=(2, 3))
-        forth_term = -F.softplus(torch.minimum(torch.zeros_like(self.level1_res_limit, device='cuda'), self.level1_res_limit.unsqueeze(0).unsqueeze(0) - S1XR), beta=1).sum(dim=(2, 3))
+        first_term = F.softplus(SXRmin, beta=1).sum(dim=(2, 3))
+        third_term = F.softplus(torch.minimum(torch.zeros_like(self.level2_res_limit, device='cuda'), self.level2_res_limit.unsqueeze(0).unsqueeze(0) - S2XR), beta=1).sum(dim=(2, 3))
+        forth_term = F.softplus(torch.minimum(torch.zeros_like(self.level1_res_limit, device='cuda'), self.level1_res_limit.unsqueeze(0).unsqueeze(0) - S1XR), beta=1).sum(dim=(2, 3))
 
         # Calculating the second term (std deviation)
-        second_term = -1e2 * torch.std(SXR, dim=2).sum(dim=-1)
+        second_term = 1e2 * torch.std(SXR, dim=2).sum(dim=-1)
 
         return first_term + second_term + third_term + forth_term
 

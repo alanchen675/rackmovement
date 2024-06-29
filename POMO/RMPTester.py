@@ -127,7 +127,8 @@ class RMPTester:
             if period < self.env.periods:
                 self.env.middle_reset(period)
 
-        return self.get_scores(batch_size, aug_factor, reward_list)
+        #return self.get_long_term_scores(batch_size, aug_factor, reward_list)
+        return self.get_scores(batch_size, aug_factor, reward)
 
     def _test_one_batch_comp_heuristic(self, batch_size):
         # Augmentation
@@ -156,7 +157,8 @@ class RMPTester:
             if period < self.env.periods:
                 self.env.middle_reset(period)
 
-        return self.get_scores(batch_size, aug_factor, reward_list)
+        #return self.get_long_term_scores(batch_size, aug_factor, reward_list)
+        return self.get_scores(batch_size, aug_factor, reward)
 
     def _test_one_batch_mip(self, batch_size):
         # Augmentation
@@ -187,7 +189,23 @@ class RMPTester:
 
         return self.get_scores(batch_size, aug_factor, reward_list)
 
-    def get_scores(self, batch_size, aug_factor, reward_list):
+    def get_scores(self, batch_size, aug_factor, reward):
+        # Return
+        ###############################################
+        aug_reward = reward.reshape(aug_factor, batch_size, self.env.pomo_size)
+        # shape: (augmentation, batch, pomo)
+
+        max_pomo_reward, _ = aug_reward.max(dim=2)  # get best results from pomo
+        # shape: (augmentation, batch)
+        no_aug_score = -max_pomo_reward[0, :].float().mean()  # negative sign to make positive value
+
+        max_aug_pomo_reward, _ = max_pomo_reward.max(dim=0)  # get best results from augmentation
+        # shape: (batch,)
+        aug_score = -max_aug_pomo_reward.float().mean()  # negative sign to make positive value
+
+        return no_aug_score.item(), aug_score.item()
+
+    def get_long_term_scores(self, batch_size, aug_factor, reward_list):
         # Return
         ###############################################
         reward = self.gen_long_term_rew(batch_size, reward_list)

@@ -47,12 +47,13 @@ model_params = {
 }
 
 tester_params = {
-    'algorithm': 'comp_heuristic',
+    #'algorithm': 'comp_heuristic',
+    'algorithm': 'pomo',
     'use_cuda': USE_CUDA,
     'cuda_device_num': CUDA_DEVICE_NUM,
     'model_load': {
-        'path': './result/saved_tsp20_model',  # directory path of pre-trained model and log files saved.
-        'epoch': 510,  # epoch version of pre-trained model to laod.
+        'path': './result/saved_rmp10_model',  # directory path of pre-trained model and log files saved.
+        'epoch': 70,  # epoch version of pre-trained model to laod.
     },
     'test_episodes': 80,
     'test_batch_size': 8,
