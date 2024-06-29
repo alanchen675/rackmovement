@@ -205,18 +205,12 @@ class RMPEnv:
     def middle_reset(self, period):
         # Regenerate the coordinates, demand, action_limit, and prev_pos_rack_map
         self.demand, self.action_limit = np.array(self.demand_pool[period]), np.array(self.action_limit_pool[period])
-        # print(f'[middle_reset][after from pool]Shape of new action_limit is {self.action_limit.shape}')
 
         # For multiprocessing, need to check the scope resource arrays
         self.prev_pos_rack_map = torch.tensor(self.pos_rack_map)
         self.demand = torch.tensor(self.demand)
         self.action_limit = torch.tensor(self.action_limit)
-        # self.problem = generate_coord(self.batch_size, self.demand)
-        #self.logger.info(f'[Middle Reset]Before generating coordination')
-        #self.logger.info(f'[Middle Reset]Shape of self.prev_pos_rack_map is {self.prev_pos_rack_map.shape}')
-        #self.logger.info(f'[Middle Reset]Second dimension of shape of self.prev_pos_rack_map is {self.prev_pos_rack_map.shape[1]}')
         self.problem = self.generator.generate_coord(self.batch_size, self.prev_pos_rack_map, self.demand)
-        #self.logger.info(f'[Middle Reset]After generating coordination')
         # Reset
         self.selected_count = 0
         self.current_node = None
@@ -228,11 +222,7 @@ class RMPEnv:
         self.step_state = Step_State(BATCH_IDX=self.BATCH_IDX, POMO_IDX=self.POMO_IDX)
         self.step_state.ninf_mask = torch.zeros((self.batch_size, self.pomo_size, self.problem_size))
         # shape: (batch, pomo, problem)
-        # self.logger.info("[Middle Reset]Before one-hot encode")
-        #self.logger.info(f'[Middle Reset]Rack type at each position for (0,0) {self.prev_pos_rack_map[0,0]}')
         self.pos_rack_map = self.one_hot_encode(self.prev_pos_rack_map, self.num_rack_types, True)
-        #self.logger.info(f'[Middle Reset]Number of racks allocated for each type after one-hot{self.pos_rack_map.sum(dim=2)}')
-        # self.logger.info("[Middle Reset]After one-hot encode")
         reward = None
         done = False
         return Reset_State(self.problems), reward, done
@@ -252,26 +242,11 @@ class RMPEnv:
 
         # The following operation makes it be of shape (batch_size, pomo_size, num_positions) and
         # The prev_pos_rack_map instance for each batch is the same for different pomo
-        # self.logger.info("[Reset]Before one-hot encode")
         if self.prev_pos_rack_map.shape[2]==1:
-            # print(f'[Reset]Shape of self.prev_pos_rack_map is {self.prev_pos_rack_map.shape} before duplication')
             duplicated_prev_pos_rack_map = self.prev_pos_rack_map.repeat(1, 1, self.pomo_size).permute(0, 2, 1)
-            # print(f'[Reset]Shape of self.prev_pos_rack_map is {self.prev_pos_rack_map.shape} before one hot encode')
             self.pos_rack_map = self.one_hot_encode(duplicated_prev_pos_rack_map, self.num_rack_types, True)
-            # print(f'[Reset]Shape of self.prev_pos_rack_map is {self.prev_pos_rack_map.shape} after one hot encode')
         else:
             self.pos_rack_map = self.one_hot_encode(self.prev_pos_rack_map, self.num_rack_types, True)
-        # self.logger.info("[Reset]After one-hot encode")
-        # shape: (batch, pomo, position, rack_type)
-        # self.scope_rack_res_array = torch.zeros((self.batch_size,\
-        #         self.pomo_size, self.num_scopes, self.num_resource_types))
-        # # shape: (batch, pomo, scope, resource_type)
-        # self.level2_scope_rack_res_array = torch.zeros((self.batch_size,\
-        #         self.pomo_size, self.num_level2_scopes, self.num_resource_types))
-        # # shape: (batch, pomo, scope, resource_type)
-        # self.level1_scope_rack_res_array = torch.zeros((self.batch_size,\
-        #         self.pomo_size, self.num_level1_scopes, self.num_resource_types))
-        # # shape: (batch, pomo, scope, resource_type)
 
         reward = None
         done = False
@@ -301,56 +276,38 @@ class RMPEnv:
         ## Decide whether parallelization is needed.
         #self.eq_heuristics_parallel(selected)
         # self.eq_heuristics(selected)
-        # self.logger.info("[Step]Before heuristic")
         self.comp_heuristics(selected)
         #self.comp_heuristics_parallel(selected)
-        # self.logger.info("[Step]After heuristic")
         done = (self.selected_count == self.problem_size)
         if done:
-            # self.logger.info("[Step]Before one-hot back to categorical")
-            # self.logger.info(f'[Before One-Hot Back]Number of racks allocated for each type {self.pos_rack_map.sum(dim=2)}')
-            # self.logger.info("[Step]After one-hot back to categorical")
-            # self.logger.info("[Step]Before calculating reward")
             reward = -self.get_reward()  # note the minus sign!
-            # self.logger.info("[Step]After calculating reward")
         else:
             reward = None
 
         return self.step_state, reward, done
 
     def obj(self, X):
-        # Using einsum to handle batched matrix multiplication
-        # Compute SXR = scopes_comp @ X @ resource_table
         SXR = torch.einsum('ij,abjk,kc->abic', self.scopes_comp, X, self.resource_table)
         # Shape = (batch_size, pomo_size, num_scopes, num_resource_types)
-
-        # Additional matrix multiplications with scopes23_comp and scopes13_comp
         S2XR = torch.einsum('ij,abjc->abic', self.scopes23_comp, SXR)
         # Shape = (batch_size, pomo_size, num_level2_scopes, num_resource_types)
         S1XR = torch.einsum('ij,abjc->abic', self.scopes13_comp, SXR)
         # Shape = (batch_size, pomo_size, num_level1_scopes, num_resource_types)
-
         # Computing the terms with softplus and sum reductions
         SXRmin = torch.minimum(torch.zeros_like(self.res_limit, device='cuda'), self.res_limit - SXR)
         #self.logger.info(f'The shape of tensor after min is {SXRmin.shape}')
         first_term = F.softplus(SXRmin, beta=1).sum(dim=(2, 3))
         third_term = F.softplus(torch.minimum(torch.zeros_like(self.level2_res_limit, device='cuda'), self.level2_res_limit.unsqueeze(0).unsqueeze(0) - S2XR), beta=1).sum(dim=(2, 3))
         forth_term = F.softplus(torch.minimum(torch.zeros_like(self.level1_res_limit, device='cuda'), self.level1_res_limit.unsqueeze(0).unsqueeze(0) - S1XR), beta=1).sum(dim=(2, 3))
-
-        # Calculating the second term (std deviation)
         second_term = 1e2 * torch.std(SXR, dim=2).sum(dim=-1)
-
         return first_term + second_term + third_term + forth_term
 
     def get_reward(self):
         reward = self.obj(self.pos_rack_map)
         self.pos_rack_map = self.one_hot_to_categorical(self.pos_rack_map)
         # Move the second dimension to the third dimension
-        # print(f'[Get Reward]Shape of self.prev_pos_rack_map is {self.prev_pos_rack_map.shape} before permute')
-        # self.logger.info(f'[Get Reward Begin]Number of racks allocated for each type {self.pos_rack_map.sum(dim=2)}')
         if self.prev_pos_rack_map.shape[2]==1:
             reshaped_prev_map = self.prev_pos_rack_map.permute(0,2,1)
-            # print(f'[Get Reward]Shape of self.prev_pos_rack_map is {self.prev_pos_rack_map.shape} after permute')
             # Expand A to match the shape of B for broadcasting
             reshaped_prev_map = reshaped_prev_map.expand(-1, self.pos_rack_map.shape[1], -1)
             mask = (reshaped_prev_map.squeeze(1)!=self.num_rack_types)&(reshaped_prev_map.squeeze(1)!=self.pos_rack_map)
@@ -362,43 +319,22 @@ class RMPEnv:
         reward += torch.sum(mask, dim=2)
         # Check whether this is a bug. The action_limit violation should contribute individually to each batch.
         reward += torch.sum(self.action_limit<0)*100
-        #self.logger.info(f'[Get Reward After]Number of racks allocated for each type {self.pos_rack_map.sum(dim=2)}')
-        # Assume that the shared tensors can still be used to calculate reward
-        # max_res_per_scope = torch.max(self.scope_rack_res_array, dim=2)[0]
-        # reward += torch.sum(max_res_per_scope, dim=2)
-        # max_res_per_level2_scope = torch.max(self.level2_scope_rack_res_array, dim=2)[0]
-        # reward += torch.sum(max_res_per_level2_scope, dim=2)
-        # max_res_per_level1_scope = torch.max(self.level1_scope_rack_res_array, dim=2)[0]
-        # reward += torch.sum(max_res_per_level1_scope, dim=2)
         return reward
 
     def comp_heuristics_parallel(self, action):
         num_gpus = torch.cuda.device_count()
         batch_size = self.pos_rack_map.size(0)
-        # This ensures handling cases where batch_size isn't perfectly divisible
         split_size = (batch_size + num_gpus - 1) // num_gpus
         X_splits = torch.split(self.pos_rack_map, split_size)
         action_splits = torch.split(action, split_size)
         demand_splits = torch.split(self.demand, split_size)
         outputs = []
-        #self.logger.info(f'[Before]Number of racks allocated for each type {self.pos_rack_map.sum(dim=2)}')
         for i, X_chunk in enumerate(X_splits):
-            # Move chunk to GPU
             X_gpu = X_chunk.to(f'cuda:{i}')
             action_gpu = action_splits[i].to(f'cuda:{i}')
             demand_gpu = demand_splits[i].to(f'cuda:{i}')
-
-            # Perform the computation on the GPU
             output_gpu = self._comp_heuristics(X_gpu, action_gpu, demand_gpu)
-
-            # Move the result back to CPU or to a specific GPU
-            # Collect all outputs on GPU 0, or replace 'cuda:0' with 'cpu' if you prefer
-            #outputs.append(output_gpu.to('cuda:0'))
             output_gpu.to('cuda:0')
-
-        #final_output = torch.cat(outputs, dim=0)
-        #self.pos_rack_map.copy_(final_output)  # In-place update if necessary
-        #self.logger.info(f'[After]Number of racks allocated for each type {self.pos_rack_map.sum(dim=2)}')
 
     def _comp_heuristics(self, pr_map, action, demand):
         for batch_id in range(pr_map.shape[0]):
@@ -423,7 +359,6 @@ class RMPEnv:
         #self.logger.info(f'Number of racks allocated for each type {self.pos_rack_map.sum(dim=2)}')
 
     def f(self, X):
-        # Compute the product S * X * R
         SXR = self.scopes_comp @ X @ self.resource_table
         # Shape = (num_scopes, num_resource_types)
         S2XR = self.scopes23_comp @ SXR
@@ -431,13 +366,11 @@ class RMPEnv:
         S1XR = self.scopes13_comp @ SXR
         # Shape = (num_level1_scopes, num_resource_types)
 
-        # First term: apply softplus to the minimum result of L - SXR, then take the negative sum
         sub_scope_rack_res = self.res_limit.squeeze(0).squeeze(0)
         first_term = -F.softplus(torch.min(torch.zeros_like(sub_scope_rack_res), sub_scope_rack_res - SXR), beta=1).sum()
         third_term = -F.softplus(torch.min(torch.zeros_like(self.level2_res_limit), self.level2_res_limit - S2XR), beta=1).sum()
         forth_term = -F.softplus(torch.min(torch.zeros_like(self.level1_res_limit), self.level1_res_limit - S1XR), beta=1).sum()
 
-        # Second term: calculate the negative sum of standard deviations of SXR along dim=0, scaled by -100
         second_term = -1e2 * torch.std(SXR, dim=0).sum()
 
         return first_term + second_term + third_term + forth_term
@@ -453,13 +386,7 @@ class RMPEnv:
         current_allocation = X[:, rack_type].sum()
         allocation = demand - current_allocation
         # Calculate the number of steps required based on the absolute value of allocation
-        #self.logger.info(f'Num of racks for rack type {rack_type} is {current_allocation}')
-        #self.logger.info(f'Num of demand is {demand}')
-        #self.logger.info(f'The result allocation number is {allocation}')
         steps = int(abs(allocation.item()))
-        #self.logger.info(f'The type of allocation is {type(allocation)}')
-        # print(f'Allocation is {allocation.item()}')
-        # print(f'[Comp Seq Put][before for loop] Rack Type is {rack_type}')
         v = torch.ones(self.num_positions, 1)                        # Column vector of ones
         for i in range(steps):
             Xw = X.sum(dim=1, keepdim=True)
@@ -473,29 +400,21 @@ class RMPEnv:
                     # Apply mask to gradients and find the index with the largest gradient in column i
                     masked_grads = X.grad[:, rack_type].masked_fill(~valid_indices, float('-inf'))
                     selected_pos = torch.argmax(masked_grads)
-                    #self.logger.info(f'The selected_pos is {selected_pos} and value is {X.data[selected_pos, rack_type]}')
                     X.data[selected_pos, rack_type] += 1  # Update X at the selected index
-                    #self.logger.info(f'After, value at the selected_pos is {X.data[selected_pos, rack_type]}')
                 else:
                     print("No valid index with Xw[j] == 0 found.")
-                    #self.logger.info(f'Shape of Xw is {Xw[:,0].shape}')
             elif allocation < 0:
                 # Negative demand: Decrease X where X[:, rack_type] is not 0
                 non_zero_indices = (X[:, rack_type] > 0)
                 if non_zero_indices.any():
                     masked_grads = X.grad[:, rack_type].masked_fill(~non_zero_indices, float('inf'))
                     selected_pos = torch.argmin(masked_grads)
-                    #self.logger.info(f'The selected_pos is {selected_pos} and value is {X.data[selected_pos, rack_type]}')
                     X.data[selected_pos, rack_type] = 0  # Set X at the selected position to 0
-                    #self.logger.info(f'After, value at the selected_pos is {X.data[selected_pos, rack_type]}')
                 else:
                     print("No valid index with X[:, rack_type] != 0 found.")
-                    #self.logger.info(f'Shape of Xw is {Xw[:,0].shape}')
 
             # Zero the gradients after the update
-            #self.logger.info(f'Number of racks allocated for each type {X.sum(dim=0)}')
             X.grad.zero_()
-            #self.logger.info(f'After zero grad, number of racks allocated for each type {X.sum(dim=0)}')
 
     def eq_heuristics(self, action):
         """
