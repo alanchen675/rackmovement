@@ -37,13 +37,22 @@ import matplotlib.pyplot as plt
 import json
 import shutil
 
-process_start_time = datetime.now(pytz.timezone('US/Eastern'))
-result_folder = './result/' + process_start_time.strftime("%Y%m%d_%H%M%S") + '{desc}'
-
-
+#process_start_time = datetime.now(pytz.timezone('US/Eastern'))
+#result_folder = './result/' + process_start_time.strftime("%Y%m%d_%H%M%S") + '{desc}'
+#
+#
 def get_result_folder():
     return result_folder
 
+def reset_result_folder(desc=""):
+    """
+    Generates a result folder name based on the current datetime and an optional description.
+    """
+    process_start_time = datetime.now(pytz.timezone('US/Eastern'))
+    folder_name = './result/' + process_start_time.strftime("%Y%m%d_%H%M%S")
+    if desc:
+        folder_name += '_' + desc
+    return folder_name
 
 def set_result_folder(folder):
     global result_folder
@@ -51,13 +60,20 @@ def set_result_folder(folder):
 
 
 def create_logger(log_file=None):
-    if 'filepath' not in log_file:
-        log_file['filepath'] = get_result_folder()
+    #if 'filepath' not in log_file:
+    #    log_file['filepath'] = get_result_folder()
 
-    if 'desc' in log_file:
-        log_file['filepath'] = log_file['filepath'].format(desc='_' + log_file['desc'])
-    else:
-        log_file['filepath'] = log_file['filepath'].format(desc='')
+    #if 'desc' in log_file:
+    #    log_file['filepath'] = log_file['filepath'].format(desc='_' + log_file['desc'])
+    #else:
+    #    log_file['filepath'] = log_file['filepath'].format(desc='')
+    if log_file is None:
+        log_file = {}
+
+    if 'filepath' not in log_file:
+        log_file['filepath'] = reset_result_folder(log_file.get('desc', ''))
+    elif os.path.exists(log_file['filepath']):
+        log_file['filepath'] = reset_result_folder(log_file.get('desc', ''))
 
     set_result_folder(log_file['filepath'])
 

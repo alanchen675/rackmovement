@@ -4,12 +4,14 @@
 #SBATCH --nodes=1             # Total # of nodes
 #SBATCH --ntasks-per-node=1   # Number of MPI ranks per node (one rank per GPU)
 #SBATCH --gpus-per-node=1     # Number of GPUs per node
-#SBATCH --cpus-per-task=2    # cpu-cores per task (default value is 1, >1 for multi-threaded tasks)
-#SBATCH --time=10:00:00        # Total run time limit (hh:mm:ss)
+#SBATCH --cpus-per-task=1    # cpu-cores per task (default value is 1, >1 for multi-threaded tasks)
+#SBATCH --time=1:00:00        # Total run time limit (hh:mm:ss)
 #SBATCH -J rackmovement       # Job name
-#SBATCH -o rackmove_run_log.o%j   # Name of stdout output file
-#SBATCH -e rackmove_run_log.e%j   # Name of stderr error file
+#SBATCH -o leader_reward.o%j   # Name of stdout output file
+#SBATCH -e leader_reward.e%j   # Name of stderr error file
 #SBATCH -p gpu                # Queue (partition) name
+#SBATCH --mail-user=chen3365@purdue.edu
+#SBATCH --mail-type=all       # Send email to above address at begin and end of job
 cd $SLURM_SUBMIT_DIR
 module purge
 module load modtree/gpu

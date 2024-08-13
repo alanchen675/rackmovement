@@ -197,6 +197,7 @@ class RMPTester:
 
         max_pomo_reward, _ = aug_reward.max(dim=2)  # get best results from pomo
         # shape: (augmentation, batch)
+        print(max_pomo_reward)
         no_aug_score = -max_pomo_reward[0, :].float().mean()  # negative sign to make positive value
 
         max_aug_pomo_reward, _ = max_pomo_reward.max(dim=0)  # get best results from augmentation

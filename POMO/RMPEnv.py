@@ -9,7 +9,7 @@ import torch.nn.functional as F
 
 from RMProblemDef import augment_xy_data_by_8_fold, generate_coord
 from RMProblemDef_clean import ProblemGenerator
-from config_clean import config
+#from config_clean import config
 from logging import getLogger
 #from config import config
 
@@ -41,6 +41,7 @@ class RMPEnv:
         self.problem_size = env_params['problem_size']
         self.pomo_size = env_params['pomo_size']
         self.periods = env_params['periods']
+        self.config = env_params['config']
 
         # Const @Load_Problem
         ####################################
@@ -51,32 +52,32 @@ class RMPEnv:
         self.problems = None
         # shape: (batch, node, node)
         self.init_rmp()
-        self.generator = ProblemGenerator(config)
+        self.generator = ProblemGenerator(self.config)
 
     def init_rmp(self):
         # The following attributes are fixed and static for all trajectory instances.
         # ========================================
-        self.num_positions = config.num_positions
-        self.num_rack_types = config.num_rack_types
-        self.num_groups = config.num_groups
-        self.num_scopes = config.num_scopes
-        self.num_level2_scopes = config.num_level2_scopes
-        self.num_level1_scopes = config.num_level1_scopes
-        self.num_resource_types = len(config.resource_weights)
+        self.num_positions = self.config.num_positions
+        self.num_rack_types = self.config.num_rack_types
+        self.num_groups = self.config.num_groups
+        self.num_scopes = self.config.num_scopes
+        self.num_level2_scopes = self.config.num_level2_scopes
+        self.num_level1_scopes = self.config.num_level1_scopes
+        self.num_resource_types = len(self.config.resource_weights)
 
-        self.scopes = torch.tensor(config.scopes) # The array of scopes each position belongs to
+        self.scopes = torch.tensor(self.config.scopes) # The array of scopes each position belongs to
         self.scopes_comp = self.one_hot_encode(self.scopes, self.num_scopes).t().float()
-        self.level23_map = torch.tensor(config.level23_map)
+        self.level23_map = torch.tensor(self.config.level23_map)
         self.scopes23_comp = self.one_hot_encode(self.level23_map, self.num_level2_scopes).t().float()
-        self.level13_map = torch.tensor(config.level13_map)
+        self.level13_map = torch.tensor(self.config.level13_map)
         self.scopes13_comp = self.one_hot_encode(self.level13_map, self.num_level1_scopes).t().float()
-        self.resource_table = torch.tensor(config.resource_table).float()
+        self.resource_table = torch.tensor(self.config.resource_table).float()
 
-        self.res_limit = torch.tensor(config.L).float()
+        self.res_limit = torch.tensor(self.config.L).float()
         # shape: (scope, resource_type)
-        self.level2_res_limit = torch.tensor(config.level2_L)
+        self.level2_res_limit = torch.tensor(self.config.level2_L)
         # shape: (scope, resource_type)
-        self.level1_res_limit = torch.tensor(config.level1_L)
+        self.level1_res_limit = torch.tensor(self.config.level1_L)
         # shape: (scope, resource_type)
 
         # Dynamic
@@ -296,10 +297,19 @@ class RMPEnv:
         # Computing the terms with softplus and sum reductions
         SXRmin = torch.minimum(torch.zeros_like(self.res_limit, device='cuda'), self.res_limit - SXR)
         #self.logger.info(f'The shape of tensor after min is {SXRmin.shape}')
-        first_term = F.softplus(SXRmin, beta=1).sum(dim=(2, 3))
-        third_term = F.softplus(torch.minimum(torch.zeros_like(self.level2_res_limit, device='cuda'), self.level2_res_limit.unsqueeze(0).unsqueeze(0) - S2XR), beta=1).sum(dim=(2, 3))
-        forth_term = F.softplus(torch.minimum(torch.zeros_like(self.level1_res_limit, device='cuda'), self.level1_res_limit.unsqueeze(0).unsqueeze(0) - S1XR), beta=1).sum(dim=(2, 3))
+        first_term = F.softplus(-3*SXRmin, beta=4).sum(dim=(2, 3))
+        third_term = F.softplus(-3*torch.minimum(torch.zeros_like(self.level2_res_limit, device='cuda'), self.level2_res_limit.unsqueeze(0).unsqueeze(0) - S2XR), beta=4).sum(dim=(2, 3))
+        forth_term = F.softplus(-3*torch.minimum(torch.zeros_like(self.level1_res_limit, device='cuda'), self.level1_res_limit.unsqueeze(0).unsqueeze(0) - S1XR), beta=4).sum(dim=(2, 3))
         second_term = 1e2 * torch.std(SXR, dim=2).sum(dim=-1)
+
+        self.logger.info(f'The value of SXR - level 3 resource spread - is {SXR}')
+        self.logger.info(f'The value of SXRmax - level 1 resource spread difference - is {-SXRmin}')
+        self.logger.info(f'The value of S2XR - level 2 resource spread - is {S2XR}')
+        self.logger.info(f'The value of S1XR - level 1 resource spread - is {S1XR}')
+        self.logger.info(f'The value of first term - level 3 scope resource limit - is {first_term}')
+        self.logger.info(f'The value of second term - resource spread std - is {second_term}')
+        self.logger.info(f'The value of third term - level 2 scope resource limit - is {third_term}')
+        self.logger.info(f'The value of forth term - level 1 scope resource limit - is {forth_term}')
         return first_term + second_term + third_term + forth_term
 
     def get_reward(self):
@@ -316,7 +326,7 @@ class RMPEnv:
             mask = (self.prev_pos_rack_map.squeeze(1)!=self.num_rack_types)&\
                 (self.prev_pos_rack_map.squeeze(1)!=self.pos_rack_map)
         mask = mask.float()
-        reward += torch.sum(mask, dim=2)
+        reward += torch.sum(mask, dim=2)*10
         # Check whether this is a bug. The action_limit violation should contribute individually to each batch.
         reward += torch.sum(self.action_limit<0)*100
         return reward
@@ -367,9 +377,9 @@ class RMPEnv:
         # Shape = (num_level1_scopes, num_resource_types)
 
         sub_scope_rack_res = self.res_limit.squeeze(0).squeeze(0)
-        first_term = -F.softplus(torch.min(torch.zeros_like(sub_scope_rack_res), sub_scope_rack_res - SXR), beta=1).sum()
-        third_term = -F.softplus(torch.min(torch.zeros_like(self.level2_res_limit), self.level2_res_limit - S2XR), beta=1).sum()
-        forth_term = -F.softplus(torch.min(torch.zeros_like(self.level1_res_limit), self.level1_res_limit - S1XR), beta=1).sum()
+        first_term = -F.softplus(-3*torch.min(torch.zeros_like(sub_scope_rack_res), sub_scope_rack_res - SXR), beta=4).sum()
+        third_term = -F.softplus(-3*torch.min(torch.zeros_like(self.level2_res_limit), self.level2_res_limit - S2XR), beta=4).sum()
+        forth_term = -F.softplus(-3*torch.min(torch.zeros_like(self.level1_res_limit), self.level1_res_limit - S1XR), beta=4).sum()
 
         second_term = -1e2 * torch.std(SXR, dim=0).sum()
 
@@ -412,6 +422,29 @@ class RMPEnv:
                     X.data[selected_pos, rack_type] = 0  # Set X at the selected position to 0
                 else:
                     print("No valid index with X[:, rack_type] != 0 found.")
+
+            # Zero the gradients after the update
+            X.grad.zero_()
+
+        moves = int(current_allocation.item()//10)
+        for i in range(moves):
+            Xw = X.sum(dim=1, keepdim=True)
+            output = self.f(X)
+            output.backward()
+            valid_indices = (Xw[:,0] == 0)
+            occupied_indices = (Xw[:,0] == 1)
+            # Ensure that there's at least one valid index to avoid empty selection
+            if occupied_indices.any():
+                # Apply mask to gradients and find the index with the largest gradient in column i
+                masked_grads = X.grad[:, rack_type].masked_fill(~valid_indices, float('-inf'))
+                selected_pos = torch.argmax(masked_grads)
+                X.data[selected_pos, rack_type] = 0  # Update X at the selected index
+                masked_grads = X.grad[:, rack_type].masked_fill(~occupied_indices, float('inf'))
+                selected_pos = torch.argmax(masked_grads)
+                X.data[selected_pos, rack_type] = 1
+            else:
+                print("No valid index with Xw[j] == 0 found.")
+                break
 
             # Zero the gradients after the update
             X.grad.zero_()
@@ -513,16 +546,16 @@ class RMPEnvCPU(RMPEnv):
         mp.set_start_method('fork')
         # For CUDA
         #mp.set_start_method('spawn')
-        self.scopes = torch.tensor(config.scopes, device='cpu') # The array of scopes each position belongs to
-        self.level23_map = torch.tensor(config.level23_map, device='cpu')
-        self.level13_map = torch.tensor(config.level13_map, device='cpu')
-        self.resource_table = torch.tensor(config.resource_table, device='cpu')
+        self.scopes = torch.tensor(self.config.scopes, device='cpu') # The array of scopes each position belongs to
+        self.level23_map = torch.tensor(self.config.level23_map, device='cpu')
+        self.level13_map = torch.tensor(self.config.level13_map, device='cpu')
+        self.resource_table = torch.tensor(self.config.resource_table, device='cpu')
 
-        self.res_limit = torch.tensor(config.L, device='cpu')
+        self.res_limit = torch.tensor(self.config.L, device='cpu')
         # shape: (scope, resource_type)
-        self.level2_res_limit = torch.tensor(config.level2_L, device='cpu')
+        self.level2_res_limit = torch.tensor(self.config.level2_L, device='cpu')
         # shape: (scope, resource_type)
-        self.level1_res_limit = torch.tensor(config.level1_L, device='cpu')
+        self.level1_res_limit = torch.tensor(self.config.level1_L, device='cpu')
         # shape: (scope, resource_type)
     def load_problems(self, batch_size, aug_factor=1):
         super().load_problem(batch_size, aug_factor)

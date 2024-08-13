@@ -21,7 +21,12 @@ sys.path.insert(0, "../..")  # for utils
 # import
 
 import logging
+import random
+import numpy as np
 from utils.utils import create_logger, copy_all_src
+
+np.random.seed(100)
+random.seed(100)
 
 from RMPTester import RMPTester as Tester
 
@@ -47,8 +52,8 @@ model_params = {
 }
 
 tester_params = {
-    #'algorithm': 'comp_heuristic',
-    'algorithm': 'pomo',
+    'algorithm': 'comp_heuristic',
+    #'algorithm': 'pomo',
     'use_cuda': USE_CUDA,
     'cuda_device_num': CUDA_DEVICE_NUM,
     'model_load': {

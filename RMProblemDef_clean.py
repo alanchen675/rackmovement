@@ -24,12 +24,16 @@ class ProblemGenerator:
         problem = torch.from_numpy(np.array(problem)).float().to('cuda')
         pos_rack_map = torch.from_numpy(np.array(pos_rack_map)).to('cuda')
 
+        print('Problem initialization')
+        print(f'Problem is {problem}')
+        print(f'Demand is {demand}')
+        print(f'Action limit is {action_limit}')
+
         return problem, pos_rack_map, torch.tensor(demand), torch.tensor(action_limit), demand_pool, action_limit_pool
 
     def generate_coord(self, batch_size, pos_rack_map, demand):
         pos_rack_map = pos_rack_map.to('cuda')  # Assume pos_rack_map is a Tensor and move to GPU
         demand = demand.to('cuda')  # Move demand to GPU if not already
-        
         x_coords = torch.zeros(batch_size, 1, device='cuda')
         y_coords = torch.zeros(batch_size, 1, device='cuda')
 
@@ -47,7 +51,7 @@ class ProblemGenerator:
         """
         Generate coordinate for each initial problem instances. Called after the first step.
         pos_rack_map - shape = (batch_size, num_positions, 1)
-        demand = 
+        demand =
         """
         problem = []
         for batch_id in range(batch_size):
@@ -66,23 +70,32 @@ class ProblemGenerator:
 
     def generate_demand(self, batch_size, time_steps):
         dm_low, dm_high = self.config.demand_range
-        demand = np.random.randint(dm_low, dm_high + 1, (batch_size, self.config.num_rack_types))
-        rest_demand = np.random.randint(dm_low, dm_high + 1, (time_steps - 1, batch_size, self.config.num_rack_types))
+        #demand = np.random.randint(dm_low, dm_high + 1, (batch_size, self.config.num_rack_types))
+        demand = np.array([[random.randint(dm_low, dm_high) for _ in range(self.\
+                config.num_rack_types)] for _ in range(batch_size)])
+        #rest_demand = np.random.randint(dm_low, dm_high + 1, (time_steps - 1, batch_size, self.config.num_rack_types))
+        rest_demand = np.array([[[random.randint(dm_low, dm_high) for _ in range(self.\
+                config.num_rack_types)] for _ in range(batch_size)] for _ in range(time_steps - 1)])
         demand_pool = np.concatenate([demand[None, :, :], rest_demand], axis=0)
         return demand, rest_demand, demand_pool
 
     def generate_action_limit(self, batch_size, time_steps):
         act_low, act_high = self.config.action_limit_range
-        action_limit = np.random.randint(act_low, act_high + 1, (batch_size, 1))
-        rest_action_limit = np.random.randint(act_low, act_high + 1, (time_steps - 1, batch_size, 1))
+        #action_limit = np.random.randint(act_low, act_high + 1, (batch_size, 1))
+        action_limit = np.array([[random.randint(act_low, act_high)] for _ in range(batch_size)])
+        #rest_action_limit = np.random.randint(act_low, act_high + 1, (time_steps - 1, batch_size, 1))
+        rest_action_limit = np.array([[[random.randint(act_low, act_high)] for _ in range(batch_size)\
+            ] for _ in range(time_steps - 1)])
         action_limit_pool = np.concatenate([action_limit[None, :, :], rest_action_limit], axis=0)
         action_limit = np.tile(action_limit, (1, self.config.num_rack_types))
         return action_limit, rest_action_limit, action_limit_pool
 
     def generate_pos_rack_mapping(self, rack_vals):
-        sub_pos_rack_map = np.random.choice(np.array(rack_vals),
-                                            (self.config.num_positions, 1),
-                                            p=np.array(self.config.rack_pos_mapping_prob))
+        #sub_pos_rack_map = np.random.choice(np.array(rack_vals),
+        #                                    (self.config.num_positions, 1),
+        #                                    p=np.array(self.config.rack_pos_mapping_prob))
+        sub_pos_rack_map = np.array([[random.choices(rack_vals, weights=self.config.rack_pos_mapping_prob,\
+            k=1)[0]] for _ in range(self.config.num_positions)])
         num_prev_pos_assigned = self.generate_num_prev_assigned(sub_pos_rack_map)
         return sub_pos_rack_map, num_prev_pos_assigned
 
