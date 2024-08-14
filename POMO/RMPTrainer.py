@@ -278,6 +278,7 @@ class RMPTrainer:
         # Leader reward scale
         max_pomo_reward, indices = torch.max(reward, dim=1) # get best results from pomo
         advantage = reward - reward.float().mean(dim=1, keepdims=True)
+        original_advantage = advantage.clone()
         # shape: (batch, pomo)
         # Leader reward scale
         if self.trainer_params['leader_reward']:
@@ -287,7 +288,9 @@ class RMPTrainer:
         # size = (batch, pomo)
         loss = -(advantage * log_prob)  # Minus Sign: To Increase REWARD
         # size = (batch, pomo)
+        original_loss = -(original_advantage * log_prob)
         loss_mean = loss.mean()
+        original_loss_mean = original_loss.mean()
 
         # Score
         ###############################################
@@ -299,4 +302,5 @@ class RMPTrainer:
         self.model.zero_grad()
         loss_mean.backward()
         self.optimizer.step()
-        return score_mean.item(), loss_mean.item()
+        #return score_mean.item(), loss_mean.item()
+        return score_mean.item(), original_loss_mean.item()

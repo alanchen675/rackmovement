@@ -63,11 +63,11 @@ optimizer_params = {
 
 trainer_params = {
     'leader_reward': True,
-    'leader_reward_alpha': 1,
+    'leader_reward_alpha': 4,
     'use_cuda': USE_CUDA,
     'cuda_device_num': CUDA_DEVICE_NUM,
-    'epochs': 10,
-    'train_episodes': 16,
+    'epochs': 200,
+    'train_episodes': 64,
     #'train_batch_size': 64,
     'train_batch_size': 8,
     'logging': {

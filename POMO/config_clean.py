@@ -87,7 +87,6 @@ class Config:
         for rack_id in range(self.num_rack_types):
             random_numbers = np.random.random(size=len(self.resource_weights))
             resources = (random_numbers < self.resource_weights).astype(int)
-            #resources = [1 if random.random() < prob else 0 for prob in self.resource_weights]
             res_int = sum(res * 2**i for i, res in enumerate(resources))
             self.resource_table.append(resources)
             self.resource_int.append(res_int)

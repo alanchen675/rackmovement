@@ -6,6 +6,10 @@ class ProblemGenerator:
     def __init__(self, config):
         self.config = config
 
+    def test_print(self, old_random, new_random, variable):
+        print(f'Old random {variable} is {old_random}')
+        print(f'New random {variable} is {new_random}')
+
     def get_random_problems(self, batch_size, problem_size, time_steps=5):
         demand, rest_demand, demand_pool = self.generate_demand(batch_size, time_steps)
         action_limit, rest_action_limit, action_limit_pool = self.generate_action_limit(batch_size, time_steps)
@@ -70,10 +74,8 @@ class ProblemGenerator:
 
     def generate_demand(self, batch_size, time_steps):
         dm_low, dm_high = self.config.demand_range
-        #demand = np.random.randint(dm_low, dm_high + 1, (batch_size, self.config.num_rack_types))
         demand = np.array([[random.randint(dm_low, dm_high) for _ in range(self.\
                 config.num_rack_types)] for _ in range(batch_size)])
-        #rest_demand = np.random.randint(dm_low, dm_high + 1, (time_steps - 1, batch_size, self.config.num_rack_types))
         rest_demand = np.array([[[random.randint(dm_low, dm_high) for _ in range(self.\
                 config.num_rack_types)] for _ in range(batch_size)] for _ in range(time_steps - 1)])
         demand_pool = np.concatenate([demand[None, :, :], rest_demand], axis=0)
@@ -81,9 +83,7 @@ class ProblemGenerator:
 
     def generate_action_limit(self, batch_size, time_steps):
         act_low, act_high = self.config.action_limit_range
-        #action_limit = np.random.randint(act_low, act_high + 1, (batch_size, 1))
         action_limit = np.array([[random.randint(act_low, act_high)] for _ in range(batch_size)])
-        #rest_action_limit = np.random.randint(act_low, act_high + 1, (time_steps - 1, batch_size, 1))
         rest_action_limit = np.array([[[random.randint(act_low, act_high)] for _ in range(batch_size)\
             ] for _ in range(time_steps - 1)])
         action_limit_pool = np.concatenate([action_limit[None, :, :], rest_action_limit], axis=0)
