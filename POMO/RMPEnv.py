@@ -302,10 +302,14 @@ class RMPEnv:
         forth_term = F.softplus(-3*torch.minimum(torch.zeros_like(self.level1_res_limit, device='cuda'), self.level1_res_limit.unsqueeze(0).unsqueeze(0) - S1XR), beta=20).sum(dim=(2, 3))
         second_term = 1e2 * torch.std(SXR, dim=2).sum(dim=-1)
 
+        #self.logger.info(f'The value of SXR - level 3 resource spread - is {SXR}')
         self.logger.info(f'The value of SXR - level 3 resource spread - is {SXR}')
-        self.logger.info(f'The value of SXRmax - level 1 resource spread difference - is {-SXRmin}')
+        self.logger.info(f'The value of SXRmax - level 3 resource spread difference - is {-SXRmin}')
         self.logger.info(f'The value of S2XR - level 2 resource spread - is {S2XR}')
         self.logger.info(f'The value of S1XR - level 1 resource spread - is {S1XR}')
+        self.logger.info(f'The number of violations for level 3 is {torch.sum(-SXRmin>0.1).item()}')
+        self.logger.info(f'The number of violations for level 2 is {torch.sum((self.level2_res_limit-S2XR)<-0.1).item()}')
+        self.logger.info(f'The number of violations for level 1 is {torch.sum((self.level1_res_limit-S1XR)<-0.1).item()}')
         self.logger.info(f'The value of first term - level 3 scope resource limit - is {first_term}')
         self.logger.info(f'The value of second term - resource spread std - is {second_term}')
         self.logger.info(f'The value of third term - level 2 scope resource limit - is {third_term}')
@@ -404,8 +408,8 @@ class RMPEnv:
             output.backward()
             if allocation > 0:
                 # Positive demand: Increase X where Xw is 0
+                valid_indices = (X[:, rack_type] == 0)
                 #valid_indices = (Xw[:,0] == 0)
-                valid_indices = (X[:, rack_type]==0)
                 # Ensure that there's at least one valid index to avoid empty selection
                 if valid_indices.any():
                     # Apply mask to gradients and find the index with the largest gradient in column i
@@ -686,7 +690,7 @@ class RMPEnvCPU(RMPEnv):
             # Get the mask for positions already assgined to action
             assigned_mask = (self.prev_pos_rack_map[batch_id] == action)
             # Find positions that belong to the current rack type
-            mask = scope_mask & assigned_mask 
+            mask = scope_mask & assigned_mask
             mask = mask.squeeze(-1)
             num_positions = mask.sum()
 
@@ -708,7 +712,7 @@ class RMPEnvCPU(RMPEnv):
                 remaining_positions = remaining_positions.int()
                 remaining_mask = (self.prev_pos_rack_map[batch_id] == self.num_rack_types)
                 # shape: (position, 1)
-                remaining_mask = scope_mask&remaining_mask 
+                remaining_mask = scope_mask&remaining_mask
                 remaining_mask = remaining_mask.squeeze(-1)
                 # shape: position
                 remaining_positions = min(remaining_positions, remaining_mask.sum())
@@ -719,7 +723,7 @@ class RMPEnvCPU(RMPEnv):
                 self.pos_rack_map[batch_id, pomo_id, remaining_mask] = action
                 self.pos_rack_map[batch_id, pomo_id, mask] = action
                 ## TODO-The assigned positions in previous mapping should be kept
-                self.action_limit[batch_id, pomo_id] -= total_assigned_positions.int() 
+                self.action_limit[batch_id, pomo_id] -= total_assigned_positions.int()
                 resource_usage = total_assigned_positions*self.resource_table[action]
             else:
                 mask = mask.nonzero()[:]
