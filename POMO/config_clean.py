@@ -69,6 +69,21 @@ class Config:
         np.random.shuffle(self.level13_map)
         np.random.shuffle(self.scopes)
 
+    def initialize_racks_v2(self):
+        """Define rack type weights and probability mappings.
+        Special setting for the 1k position case"""
+        self.rack_group_weights = [0.25] * self.num_groups
+        random_numbers = np.random.rand(7)
+        normalized_numbers_7rts = random_numbers / random_numbers.sum()
+        normalized_numbers_7rts *= 2.0/7
+        self.rack_pos_mapping_prob = normalized_numbers_7rts.tolist()
+        #self.rack_pos_mapping_prob.insert(5, 0.1)
+        #self.rack_pos_mapping_prob.insert(7, 0.1)
+        #self.rack_pos_mapping_prob.append(0.1)
+        self.rack_pos_mapping_prob.append(5.0/7)
+        print(self.rack_pos_mapping_prob)
+        self.rt_groups = np.random.choice(self.num_groups, (self.num_rack_types, 1), p=self.rack_group_weights)
+
     def initialize_racks(self):
         """Define rack type weights and probability mappings."""
         self.rack_group_weights = [0.25] * self.num_groups
