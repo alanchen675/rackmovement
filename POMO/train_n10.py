@@ -66,8 +66,8 @@ trainer_params = {
     'leader_reward_alpha': 1,
     'use_cuda': USE_CUDA,
     'cuda_device_num': CUDA_DEVICE_NUM,
-    'epochs': 10,
-    'train_episodes': 16,
+    'epochs': 50,
+    'train_episodes': 64,
     #'train_batch_size': 64,
     'train_batch_size': 8,
     'logging': {
@@ -112,7 +112,7 @@ def main():
     # Set config object or trainer_params['leader_reward_alpha'] 
     # Revise logger_params['log_file']['desc'] so that results are saved in the corresponding folder
 
-    lr_alpha_list = [2, 4, 8, 16, 32]
+    lr_alpha_list = [4, 16, 32, 64, 128]
     sp_beta_list = [(20, 10, 4), (40, 20, 8)]
     sscale_res_limit = [(3,6,40,60,80,100)]
     lscale_res_limit = [(4,7,50,70,90,110)]

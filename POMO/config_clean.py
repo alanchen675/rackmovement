@@ -4,9 +4,9 @@ import random
 class Config:
     def __init__(self):
         settings = 1
-        self.sscale_l3_resmin, self.sscale_l3_resmax = 2, 5
+        self.sscale_l3_resmin, self.sscale_l3_resmax = 3, 6
         self.sscale_l2_resmin, self.sscale_l2_resmax = 30, 50
-        self.sscale_l1_resmin, self.sscale_l1_resmax = 70, 90
+        self.sscale_l1_resmin, self.sscale_l1_resmax = 90, 110
         self.lscale_l3_resmin, self.lscale_l3_resmax = 2, 5
         self.lscale_l2_resmin, self.lscale_l2_resmax = 30, 50
         self.lscale_l1_resmin, self.lscale_l1_resmax = 70, 90
@@ -108,13 +108,13 @@ class Config:
     def initialize_constraints(self, setting):
         """Setup constraints for resources at different scope levels."""
         if setting==1:
-            self.L = np.random.randint(self.sscale_l1_resmin, self.sscale_l1_resmax, size=(self.num_scopes, self.num_rack_types))
+            self.L = np.random.randint(self.sscale_l3_resmin, self.sscale_l3_resmax, size=(self.num_scopes, self.num_rack_types))
             self.level2_L = np.random.randint(self.sscale_l2_resmin, self.sscale_l2_resmax, size=(self.num_level2_scopes, self.num_rack_types))
-            self.level1_L = np.random.randint(self.sscale_l3_resmin, self.sscale_l3_resmax, size=(self.num_level1_scopes, self.num_rack_types))
+            self.level1_L = np.random.randint(self.sscale_l1_resmin, self.sscale_l1_resmax, size=(self.num_level1_scopes, self.num_rack_types))
         else:
-            self.L = np.random.randint(self.lscale_l1_resmin, self.lscale_l1_resmax, size=(self.num_scopes, self.num_rack_types))
+            self.L = np.random.randint(self.lscale_l3_resmin, self.lscale_l3_resmax, size=(self.num_scopes, self.num_rack_types))
             self.level2_L = np.random.randint(self.lscale_l2_resmin, self.lscale_l2_resmax, size=(self.num_level2_scopes, self.num_rack_types))
-            self.level1_L = np.random.randint(self.lscale_l3_resmin, self.lscale_l3_resmax, size=(self.num_level1_scopes, self.num_rack_types))
+            self.level1_L = np.random.randint(self.lscale_l1_resmin, self.lscale_l1_resmax, size=(self.num_level1_scopes, self.num_rack_types))
             #self.L = np.random.randint(2, 5, size=(self.num_scopes, self.num_rack_types))
             #self.level2_L = np.random.randint(30, 50, size=(self.num_level2_scopes, self.num_rack_types))
             #self.level1_L = np.random.randint(70, 90, size=(self.num_level1_scopes, self.num_rack_types))

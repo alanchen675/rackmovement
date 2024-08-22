@@ -29,7 +29,7 @@ np.random.seed(100)
 random.seed(100)
 
 from RMPTester import RMPTester as Tester
-
+from config_clean import config
 
 ##########################################################################################
 # parameters
@@ -37,6 +37,7 @@ from RMPTester import RMPTester as Tester
 env_params = {
     'problem_size': 10,
     'pomo_size': 10,
+    'config': config,
     'periods': 1,
 }
 
